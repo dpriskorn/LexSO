@@ -17,7 +17,7 @@ from models.wikidata import LexemeLanguage, ForeignID
 wd_prefix = "http://www.wikidata.org/entity/"
 count_only = False
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Pseudo code
@@ -126,6 +126,11 @@ def load_dictionary_into_memory():
             url = urlparse(row[4])
             # print(url.query)
             dictionary_id = dict(parse_qsl(url.query))["id"]
+            if "_" in dictionary_id:
+                logger.debug(f"Detected underscore id {dictionary_id}")
+                # We hardcode to always return 1 after the underscore
+                dictionary_id = dictionary_id[0:dictionary_id.find("_")] + "_1"
+                logger.debug(f"Hardcoded to {dictionary_id}")
             # Create object
             entry = so.SOEntry(
                 id=dictionary_id,
@@ -168,79 +173,23 @@ def process_lexemes(lexeme_lemma_list: List = None,
         lexeme: wikidata.Lexeme = lexemes_data[lemma]
         if not count_only:
             logging.info(f"Working on {lexeme.id}: {lexeme.lemma} {lexeme.lexical_category}")
-        value_count = 0
-        matching_dictionary_indexes = []
         if lexeme.lemma in dictionary_lemma_list:
-            # Count number of hits
-            for count, dictionary_lemma in enumerate(dictionary_lemma_list):
-                if dictionary_lemma == lexeme.lemma:
-                    # print(count, value)
-                    matching_dictionary_indexes.append(count)
-                    value_count += 1
-            if value_count > 1:
-                if not count_only:
-                    logger.debug(f"Found more than 1 matching lemma = complex")
-                    adj_count = 0
-                    subst_count = 0
-                    verb_count = 0
-                    adjective_regex = "adj"
-                    for index in matching_dictionary_indexes:
-                        entry = dictionary_data[index]
-                        if "subst" in entry.lexical_category:
-                            logging.debug(f"Detected noun: {entry.lexical_category}")
-                            subst_count += 1
-                        if "verb" in entry.lexical_category:
-                            logging.debug(f"Detected verb: {entry.lexical_category}")
-                            verb_count += 1
-                        if "adj" in entry.lexical_category:
-                            logging.debug(f"Detected adjective: {entry.lexical_category}")
-                            adj_count += 1
-                    for index in matching_dictionary_indexes:
-                        entry = dictionary_data[index]
-                        logging.debug(f"index {index} lemma: {entry.lemma} {entry.lexical_category} "
-                                      f"number {entry.number}, see {entry.url()}")
-                        result: bool = check_matching_category(lexeme=lexeme,
-                                                               entry=entry)
-                        if result:
-                            logging.info("Categories match")
-                            match_count += 1
-                            if not count_only:
-                                if entry.lexical_category == "subst":
-                                    if subst_count > 1:
-                                        logging.info("More that one noun found. Skipping")
-                                        skipped_multiple_matches += 1
-                                        continue
-                                if entry.lexical_category == "verb":
-                                    if verb_count > 1:
-                                        logging.info("More that one verb found. Skipping")
-                                        skipped_multiple_matches += 1
-                                        continue
-                                if entry.lexical_category == "adj":
-                                    if adj_count > 1:
-                                        logging.info("More that one adj found. Skipping")
-                                        skipped_multiple_matches += 1
-                                        continue
-                                # TODO scrape entry definitions from dictionary and let the user decide
-                                # whether any match the senses of the lexeme if any
-                                lexeme.upload_foreign_id_to_wikidata(foreign_id=ForeignID(
-                                    id=entry.id,
-                                    property=config.foreign_id_property,
-                                    source_item_id=config.source_item_id
-                                ))
-            elif value_count == 1:
-                # Only 1 search result in the dictionary wordlist so pick it
-                entry = dictionary_data[matching_dictionary_indexes[0]]
-                logger.debug(f"Only 1 matching lemma, see {entry.url()}")
-                result = check_matching_category(lexeme=lexeme,
-                                                 entry=entry)
-                if result:
-                    match_count += 1
-                    if not count_only:
-                        lexeme.upload_foreign_id_to_wikidata(foreign_id=ForeignID(
-                            id=entry.id,
-                            property=config.foreign_id_property,
-                            source_item_id=config.source_item_id
-                        ))
+            for index, dictionary_lemma in enumerate(dictionary_lemma_list):
+                if lexeme.lemma == dictionary_lemma:
+                    entry = dictionary_data[index]
+                    logger.debug(f"Only 1 matching lemma, see {entry.url()}")
+                    result = check_matching_category(lexeme=lexeme,
+                                                     entry=entry)
+                    if result:
+                        match_count += 1
+                        if not count_only:
+                            lexeme.upload_foreign_id_to_wikidata(foreign_id=ForeignID(
+                                id=entry.id,
+                                property=config.foreign_id_property,
+                                source_item_id=config.source_item_id
+                            ))
+                        # Pick only the first search result in the dictionary wordlist
+                        break
         else:
             if not count_only:
                 logging.debug(f"{lexeme.lemma} not found in dictionary wordlist")
