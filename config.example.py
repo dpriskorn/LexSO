@@ -13,3 +13,5 @@ login_instance = None
 loglevel = None
 tool_url = "Wikidata:Tools/LexSAOB"
 wd_prefix = "http://www.wikidata.org/entity/"
+foreign_id_property = "P9837"
+source_item_id = "Q108312794"

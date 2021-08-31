@@ -10,14 +10,14 @@ data = {
     'action': 'myprefix_scrollist',
     'unik': '0',
     'dir': 'ned',
-    'dict': 'saob'
+    'dict': 'so'
 }
 headers = {
     'User-Agent': 'Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:63.0) Gecko/20100101 Firefox/63.0'
 }
 date = datetime.today().strftime("%Y-%m-%d")
 print(date)
-file = open(f"saob_{date}.csv", "a")
+file = open(f"so_{date}.csv", "a", encoding='UTF-8')
 
 
 def main():

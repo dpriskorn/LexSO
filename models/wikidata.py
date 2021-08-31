@@ -389,6 +389,56 @@ class LexemeLanguage:
                     ))
         print(f"{len(self.lexemes)} fetched")
 
+    def fetch_all_lexemes_without_so_id(self):
+        """download all swedish lexemes via sparql (~23000 as of 2021-04-05)"""
+        # dictionary with word as key and list in the value
+        # list[0] = lid
+        # list[1] = category Qid
+        print("Fetching all lexemes")
+        lexemes_data = {}
+        lexeme_lemma_list = []
+        for i in range(0, 80000, 40000):
+            print(i)
+            results = execute_sparql_query(f"""
+                    select ?lexemeId ?lemma ?category
+                WHERE {{
+                  #hint:Query hint:optimizer "None".
+                  ?lexemeId dct:language wd:Q9027;
+                            wikibase:lemma ?lemma;
+                            wikibase:lexicalCategory ?category.
+                  MINUS{{
+                    ?lexemeId wdt:P9837 [].
+                  }}
+                  MINUS {{
+                    # Exclude truthy no value statements
+                    ?lexemeId a wdno:P9837.                  
+                  }}
+                }}
+        limit 40000
+        offset {i}
+            """)
+            if len(results) == 0:
+                print("No lexeme found")
+            else:
+                # print("adding lexemes to list")
+                # pprint(results.keys())
+                # pprint(results["results"].keys())
+                # pprint(len(results["results"]["bindings"]))
+                for result in results["results"]["bindings"]:
+                    # print(result)
+                    # *************************
+                    # Handle result and upload
+                    # *************************
+                    lemma = result["lemma"]["value"]
+                    lid = result["lexemeId"]["value"].replace(config.wd_prefix, "")
+                    lexical_category = result["category"]["value"].replace(config.wd_prefix, "")
+                    self.lexemes.append(Lexeme(
+                        id=lid,
+                        lemma=lemma,
+                        lexical_category=lexical_category
+                    ))
+        print(f"{len(self.lexemes)} fetched")
+
     def lemma_list(self):
         lemmas = []
         for lexeme in self.lexemes:
