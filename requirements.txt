@@ -1,0 +1,2 @@
+bs4
+wikibaseintegrator==0.11.0
