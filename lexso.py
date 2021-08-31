@@ -109,7 +109,7 @@ def load_dictionary_into_memory():
     dictionary_lemma_list = []
     dictionary_data = {}
     # open file in read mode
-    with open('so_2021-08-31.csv', 'r') as read_obj:
+    with open('so_2021-09-01.csv', 'r') as read_obj:
         # pass the file object to reader() to get the reader object
         csv_reader = reader(read_obj)
         count = 0
@@ -227,8 +227,6 @@ def process_lexemes(lexeme_lemma_list: List = None,
                                     property=config.foreign_id_property,
                                     source_item_id=config.source_item_id
                                 ))
-                                # debug
-                                exit(0)
             elif value_count == 1:
                 # Only 1 search result in the dictionary wordlist so pick it
                 entry = dictionary_data[matching_dictionary_indexes[0]]

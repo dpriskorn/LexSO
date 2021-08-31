@@ -130,7 +130,7 @@ class Lexeme:
                 statement = wbi_datatype.ExternalID(
                     prop_nr=foreign_id.property,
                     value=None,
-                    snak_type="novalue",
+                    snak_type="novalue"
                 )
                 item = wbi_core.ItemEngine(
                     data=[statement],
@@ -154,7 +154,8 @@ class Lexeme:
             )
             described_by_source = wbi_datatype.ItemID(
                 prop_nr="P1343",  # stated in
-                value=foreign_id.source_item_id
+                value=foreign_id.source_item_id,
+                if_exits="APPEND"
             )
             item = wbi_core.ItemEngine(
                 data=[statement,
