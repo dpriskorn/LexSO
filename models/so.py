@@ -128,3 +128,6 @@ class SOEntry:
 
     def url(self):
         return f"https://svenska.se/so/?id={self.id}"
+
+    def search_url(self):
+        return f"https://svenska.se/so/?sok={self.lemma}"
