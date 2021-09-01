@@ -194,16 +194,18 @@ def process_lexemes(lexeme_lemma_list: List = None,
                         break
         else:
             if not count_only:
-                logging.warning(f"{lexeme.lemma} not found in dictionary wordlist, "
-                                f"see https://svenska.se/so/?sok={lexeme.lemma}")
-                sleep(3)
+                console.print(f"[red]{lexeme.lemma} not found in dictionary wordlist, "
+                                f"see 'https://svenska.se/so/?sok={lexeme.lemma}'")
                 if config.add_no_value:
                     # Add dictionary=no_value to lexeme
                     lexeme.upload_foreign_id_to_wikidata(foreign_id=ForeignID(
                         property=config.foreign_id_property,
                         no_value=True
                     ))
-                no_value_count += 1
+                else:
+                    # sleep to give the user time to read the warning above
+                    sleep(3)
+            no_value_count += 1
         processed_count += 1
     print(f"Processed {processed_count} lexemes. "
           f"Found {match_count} matches "
