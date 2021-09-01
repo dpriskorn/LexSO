@@ -392,11 +392,11 @@ class LexemeLanguage:
         # dictionary with word as key and list in the value
         # list[0] = lid
         # list[1] = category Qid
-        with console.status("Fetching all lexemes..."):
+        with console.status("Fetching all Swedish lexemes via WDQS SPARQL query..."):
             lexemes_data = {}
             lexeme_lemma_list = []
             for i in range(0, 80000, 40000):
-                print(i)
+                # print(i)
                 results = execute_sparql_query(f"""
                         select ?lexemeId ?lemma ?category
                     WHERE {{
@@ -416,7 +416,7 @@ class LexemeLanguage:
             offset {i}
                 """)
                 if len(results) == 0:
-                    print("No lexeme found")
+                    console.print("No lexeme found")
                 else:
                     # print("adding lexemes to list")
                     # pprint(results.keys())
@@ -435,7 +435,7 @@ class LexemeLanguage:
                             lemma=lemma,
                             lexical_category=lexical_category
                         ))
-        print(f"{len(self.lexemes)} fetched")
+        console.print(f"[green]{len(self.lexemes)} lexemes fetched")
 
     def lemma_list(self):
         lemmas = []

@@ -58,7 +58,8 @@ def match_lexical_category(lexeme: wikidata.Lexeme = None,
         category = "Q34698"
     elif "adv" in entry.lexical_category:
         category = "Q380057"
-    elif "konj" in entry.lexical_category:
+    elif "konj" in entry.lexical_category or "subjunktion" in entry.lexical_category:
+        # See https://www.wikidata.org/wiki/Q36484 where subjunktion is an alias
         category = "Q36484"
     elif "interj" in entry.lexical_category:
         category = "Q83034"
@@ -70,6 +71,9 @@ def match_lexical_category(lexeme: wikidata.Lexeme = None,
         category = "Q103184"
     elif "pron" in entry.lexical_category:
         category = "Q36224"
+    elif "infinitivmärke" in entry.lexical_category:
+        # See e.g. https://svenska.se/so/?id=103144_1
+        category = "Q184943"
     elif (
             entry.lexical_category == "prefix" or
             entry.lexical_category == "suffix" or
@@ -77,24 +81,27 @@ def match_lexical_category(lexeme: wikidata.Lexeme = None,
     ):
         category = "Q62155"
     elif (
-        # this covers all special cases like this one: https://svenska.se/dictionary/?id=O_0283-0242.Qqdq&pz=5
+        # this ignores all special cases where the entry is only linking to the root, e.g ingenjörskår -> kår
         "(" in entry.lexical_category or
         "ssgled" in entry.lexical_category
     ):
-        # ignore silently
+        # ignore silently for now
+        # console.print(f"[orange] ignoring {entry.lemma}, {entry.lexical_category}")
         return False
     else:
         if not count_only:
-            logging.error(f"Did not recognize category "
+            # Raise error, so that we don't accidentally add novalue to
+            # these
+            raise ValueError(f"Did not recognize category "
                           f"{entry.lexical_category} on "
                           f"{entry.url()}, skipping")
-            return False
+            # return False
     if category is not None:
         if category == lexeme.lexical_category:
             return True
         else:
             if not count_only:
-                logging.info("Categories did not match, skipping")
+                logging.info    ("Categories did not match, skipping")
             return False
 
 
