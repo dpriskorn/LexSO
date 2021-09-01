@@ -3,8 +3,6 @@ from enum import Enum
 from typing import List
 
 from wikibaseintegrator import wbi_core, wbi_datatype
-
-# This config sets the URL for the Wikibase and tool.
 from wikibaseintegrator.wbi_functions import execute_sparql_query
 
 import config
