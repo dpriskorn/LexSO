@@ -4,17 +4,16 @@ import logging
 from csv import reader
 from time import sleep
 from typing import List, Dict
-from urllib.parse import urlparse, parse_qsl
+from urllib.parse import urlparse, parse_qsl, unquote
 
-from wikibaseintegrator import wbi_login
 from wikibaseintegrator import wbi_config
+from wikibaseintegrator import wbi_login
 
 import config
 from models import wikidata, so
-from modules.console import console
-
 # Constants
 from models.wikidata import LexemeLanguage, ForeignID
+from modules.console import console
 
 wd_prefix = "http://www.wikidata.org/entity/"
 count_only = False
@@ -202,7 +201,7 @@ def process_lexemes(lexeme_lemma_list: List = None,
         else:
             if not count_only:
                 console.print(f"[red]{lexeme.lemma} not found in dictionary wordlist, "
-                                f"see 'https://svenska.se/so/?sok={lexeme.lemma}'")
+                                f"see https://svenska.se/so/?sok={unquote(lexeme.lemma)}")
                 if config.add_no_value:
                     # Add dictionary=no_value to lexeme
                     lexeme.upload_foreign_id_to_wikidata(foreign_id=ForeignID(
