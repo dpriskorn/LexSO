@@ -151,6 +151,7 @@ def process_lexemes(lexeme_lemma_list: List = None,
                     lexemes_data: Dict = None,
                     dictionary_lemma_list: List = None,
                     dictionary_data: Dict = None):
+    """Go though each lexeme and try to match with SO"""
     if (
         lexeme_lemma_list is None or
         lexemes_data is None or
@@ -216,7 +217,7 @@ def main():
             user=config.username, pwd=config.password
         )
         # Set User-Agent
-        wbi_config.config["USER_AGENT_DEFAULT"] = f"Lexdictionary (WikidataIntegrator/0.11.0) User:So9q"
+        wbi_config.config["USER_AGENT_DEFAULT"] = config.user_agent
     language = LexemeLanguage("sv")
     language.fetch_all_lexemes_without_so_id()
     lexemes_list = language.lemma_list()
