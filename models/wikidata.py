@@ -6,7 +6,7 @@ from wikibaseintegrator import wbi_core, wbi_datatype
 from wikibaseintegrator.wbi_functions import execute_sparql_query
 
 import config
-from modules import wdqs
+from modules.console import console
 
 
 class WikimediaLanguageCode(Enum):
@@ -41,12 +41,6 @@ class WikimediaLanguageQID(Enum):
     GERMAN = "Q188"
     BENGALI = "Q9610"
     CZECH = "Q9056"
-
-
-class WikidataNamespaceLetters(Enum):
-    PROPERTY = "P"
-    ITEM = "Q"
-    LEXEME = "L"
 
 
 class WikidataNamespaceLetters(Enum):
@@ -93,6 +87,7 @@ class ForeignID:
             self.source_item_id = EntityID(source_item_id).to_string()
         self.no_value = no_value
 
+
 class Lexeme:
     id: str
     lemma: str
@@ -124,13 +119,42 @@ class Lexeme:
                 logger.debug("Skip adding no-value to this lemma because "
                              "SAOB only published lemma from a-u.")
             else:
-                print(f"Uploading no_value statement to {self.id}: {self.lemma}")
+                with console.status(f"Uploading no_value statement to {self.id}: {self.lemma}..."):
+                    statement = wbi_datatype.ExternalID(
+                        prop_nr=foreign_id.property,
+                        value=None,
+                        snak_type="novalue"
+                    )
+                    item = wbi_core.ItemEngine(
+                        data=[statement],
+                        item_id=self.id
+                    )
+                    # debug WBI error
+                    # print(item.get_json_representation())
+                    result = item.write(
+                        config.login_instance,
+                        edit_summary=f"Added foreign identifier with [[{config.tool_url}]]"
+                    )
+                    logger.debug(f"result from WBI:{result}")
+                    print(self.url())
+                    #exit(0)
+        else:
+            # We found the lemma
+            with console.status(f"Uploading {foreign_id.id} to {self.id}: {self.lemma}"):
                 statement = wbi_datatype.ExternalID(
                     prop_nr=foreign_id.property,
-                    value=None,
-                    snak_type="novalue"
+                    value=foreign_id.id,
+                )
+                described_by_source = wbi_datatype.ItemID(
+                    prop_nr="P1343",  # stated in
+                    value=foreign_id.source_item_id,
+                    if_exits="APPEND"
                 )
                 item = wbi_core.ItemEngine(
+                    # data=[statement,
+                    #       described_by_source],
+                    # Turn off described_by_source until
+                    # https://github.com/LeMyst/WikibaseIntegrator/issues/208 is fixed
                     data=[statement],
                     item_id=self.id
                 )
@@ -142,36 +166,8 @@ class Lexeme:
                 )
                 logger.debug(f"result from WBI:{result}")
                 print(self.url())
-                #exit(0)
-        else:
-            # We found the lemma in SAOB
-            print(f"Uploading {foreign_id.id} to {self.id}: {self.lemma}")
-            statement = wbi_datatype.ExternalID(
-                prop_nr=foreign_id.property,
-                value=foreign_id.id,
-            )
-            described_by_source = wbi_datatype.ItemID(
-                prop_nr="P1343",  # stated in
-                value=foreign_id.source_item_id,
-                if_exits="APPEND"
-            )
-            item = wbi_core.ItemEngine(
-                # data=[statement,
-                #       described_by_source],
-                # Turn off described_by_source until
-                # https://github.com/LeMyst/WikibaseIntegrator/issues/208 is fixed
-                data=[statement],
-                item_id=self.id
-            )
-            # debug WBI error
-            # print(item.get_json_representation())
-            result = item.write(
-                config.login_instance,
-                edit_summary=f"Added foreign identifier with [[{config.tool_url}]]"
-            )
-            logger.debug(f"result from WBI:{result}")
-            print(self.url())
-            # exit(0)
+                # exit(0)
+
 
 class Form:
     pass
@@ -203,242 +199,242 @@ class LexemeLanguage:
                 f"which is {self.senses_with_P5137_per_lexeme} "
                 f"per lexeme.")
 
-    def fetch_forms_missing_an_example(self):
-        logger = logging.getLogger(__name__)
-        results = execute_sparql_query(f'''
-            #title:Forms that have no example demonstrating them
-            select ?form ?lemma
-            WHERE {{
-              ?lexemeId dct:language wd:{self.language_qid.value};
-                        wikibase:lemma ?lemma;
-                        ontolex:lexicalForm ?form.
-              MINUS {{
-              ?lexemeId p:P5831 ?statement.
-              ?statement ps:P5831 ?example;
-                         pq:P6072 [];
-                         pq:P5830 ?form_with_example.
-              }}
-            }}
-            limit 1000''')
-        self.forms_without_an_example = []
-        logger.info("Got the data")
-        for entry in results:
-            logging.debug(f"lexeme_json:{entry}")
-            f = Form.parse_from_wdqs_json(entry)
-            self.forms_without_an_example.append(f)
-        logger.info(f"Got {len(self.forms_without_an_example)} "
-                     f"forms from WDQS for language {self.language_code.name}")
-
-    def fetch_lexemes(self):
-        # TODO port to use the Lexeme class instead of heavy dataframes which we don't need
-        raise Exception("This is deprecated.")
-        results = execute_sparql_query(f'''
-        SELECT DISTINCT
-        ?entity_lid ?form ?word (?categoryLabel as ?category) (?grammatical_featureLabel as ?feature) ?sense ?gloss
-        WHERE {{
-          ?entity_lid a ontolex:LexicalEntry; dct:language wd:{self.language_qid.value}.
-          VALUES ?excluded {{
-            # exclude affixes and interfix
-            wd:Q62155 # affix
-            wd:Q134830 # prefix
-            wd:Q102047 # suffix
-            wd:Q1153504 # interfix
-          }}
-          MINUS {{?entity_lid wdt:P31 ?excluded.}}
-          ?entity_lid wikibase:lexicalCategory ?category.
-
-          # We want only lexemes with both forms and at least one sense
-          ?entity_lid ontolex:lexicalForm ?form.
-          ?entity_lid ontolex:sense ?sense.
-
-          # Exclude lexemes without a linked QID from at least one sense
-          ?sense wdt:P5137 [].
-          ?sense skos:definition ?gloss.
-          # Get only the swedish gloss, exclude otherwise
-          FILTER(LANG(?gloss) = "{self.language_code.value}")
-
-          # This remove all lexemes with at least one example which is not
-          # ideal
-          MINUS {{?entity_lid wdt:P5831 ?example.}}
-          ?form wikibase:grammaticalFeature ?grammatical_feature.
-          # We extract the word of the form
-          ?form ontolex:representation ?word.
-          SERVICE wikibase:label
-          {{ bd:serviceParam wikibase:language "{self.language_code.value},en". }}
-        }}
-        limit {config.sparql_results_size}
-        offset {config.sparql_offset}
-        ''')
-        self.lexemes = []
-        for lexeme_json in results:
-            logging.debug(f"lexeme_json:{lexeme_json}")
-            l = Lexeme.parse_wdqs_json(lexeme_json)
-            self.lexemes.append(l)
-        logging.info(f"Got {len(self.lexemes)} lexemes from WDQS for language {self.language_code.name}")
-
-    def count_number_of_lexemes(self):
-        """Returns an int"""
-        logger = logging.getLogger(__name__)
-        result = (execute_sparql_query(f'''
-        SELECT
-        (COUNT(?l) as ?count)
-        WHERE {{
-          ?l dct:language wd:{self.language_qid.value}.
-        }}'''))
-        logger.debug(f"result:{result}")
-        count: int = wdqs.extract_count(result)
-        logging.debug(f"count:{count}")
-        return count
-
-    def count_number_of_senses_with_p5137(self):
-        """Returns an int"""
-        logger = logging.getLogger(__name__)
-        result = (execute_sparql_query(f'''
-        SELECT
-        (COUNT(?sense) as ?count)
-        WHERE {{
-          ?l dct:language wd:{self.language_qid.value}.
-          ?l ontolex:sense ?sense.
-          ?sense skos:definition ?gloss.
-          # Exclude lexemes without a linked QID from at least one sense
-          ?sense wdt:P5137 [].
-        }}'''))
-        logger.debug(f"result:{result}")
-        count: int = wdqs.extract_count(result)
-        logging.debug(f"count:{count}")
-        return count
-
-    def count_number_of_forms_without_an_example(self):
-        """Returns an int"""
-        # TODO fix this to count all senses in a given language
-        result = (execute_sparql_query(f'''
-        SELECT
-        (COUNT(?form) as ?count)
-        WHERE {{
-          ?l dct:language wd:{self.language_qid.value}.
-          ?l ontolex:lexicalForm ?form.
-          ?l ontolex:sense ?sense.
-          # exclude lexemes that already have at least one example
-          MINUS {{?l wdt:P5831 ?example.}}
-          # Exclude lexemes without a linked QID from at least one sense
-          ?sense wdt:P5137 [].
-        }}'''))
-        count: int = wdqs.extract_count(result)
-        logging.debug(f"count:{count}")
-        self.forms_without_an_example = count
-
-    def count_number_of_forms_with_examples(self):
-        pass
-
-    def count_number_of_forms(self):
-        pass
-
-    def calculate_statistics(self):
-        self.lexemes_count: int = self.count_number_of_lexemes()
-        self.senses_with_P5137: int = self.count_number_of_senses_with_p5137()
-        self.calculate_senses_with_p5137_per_lexeme()
-
-    def calculate_senses_with_p5137_per_lexeme(self):
-        self.senses_with_P5137_per_lexeme = round(self.senses_with_P5137 / self.lexemes_count, 3)
-
-    def fetch_all_lexemes_without_saob_id(self):
-        """download all swedish lexemes via sparql (~23000 as of 2021-04-05)"""
-        # dictionary with word as key and list in the value
-        # list[0] = lid
-        # list[1] = category Qid
-        print("Fetching all lexemes")
-        lexemes_data = {}
-        lexeme_lemma_list = []
-        for i in range(0, 30000, 10000):
-            print(i)
-            results = execute_sparql_query(f"""
-                    select ?lexemeId ?lemma ?category
-                WHERE {{
-                  #hint:Query hint:optimizer "None".
-                  ?lexemeId dct:language wd:Q9027;
-                            wikibase:lemma ?lemma;
-                            wikibase:lexicalCategory ?category.
-                  MINUS{{
-                    ?lexemeId wdt:P8478 [].
-                  }}
-                  MINUS {{
-                    # Exclude truthy no value statements
-                    ?lexemeId a wdno:P8478.                  
-                  }}
-                }}
-        limit 10000
-        offset {i}
-            """)
-            if len(results) == 0:
-                print("No lexeme found")
-            else:
-                # print("adding lexemes to list")
-                # pprint(results.keys())
-                # pprint(results["results"].keys())
-                # pprint(len(results["results"]["bindings"]))
-                for result in results["results"]["bindings"]:
-                    # print(result)
-                    # *************************
-                    # Handle result and upload
-                    # *************************
-                    lemma = result["lemma"]["value"]
-                    lid = result["lexemeId"]["value"].replace(config.wd_prefix, "")
-                    lexical_category = result["category"]["value"].replace(config.wd_prefix, "")
-                    self.lexemes.append(Lexeme(
-                        id=lid,
-                        lemma=lemma,
-                        lexical_category=lexical_category
-                    ))
-        print(f"{len(self.lexemes)} fetched")
+    # def fetch_forms_missing_an_example(self):
+    #     logger = logging.getLogger(__name__)
+    #     results = execute_sparql_query(f'''
+    #         #title:Forms that have no example demonstrating them
+    #         select ?form ?lemma
+    #         WHERE {{
+    #           ?lexemeId dct:language wd:{self.language_qid.value};
+    #                     wikibase:lemma ?lemma;
+    #                     ontolex:lexicalForm ?form.
+    #           MINUS {{
+    #           ?lexemeId p:P5831 ?statement.
+    #           ?statement ps:P5831 ?example;
+    #                      pq:P6072 [];
+    #                      pq:P5830 ?form_with_example.
+    #           }}
+    #         }}
+    #         limit 1000''')
+    #     self.forms_without_an_example = []
+    #     logger.info("Got the data")
+    #     for entry in results:
+    #         logging.debug(f"lexeme_json:{entry}")
+    #         f = Form.parse_from_wdqs_json(entry)
+    #         self.forms_without_an_example.append(f)
+    #     logger.info(f"Got {len(self.forms_without_an_example)} "
+    #                  f"forms from WDQS for language {self.language_code.name}")
+    #
+    # def fetch_lexemes(self):
+    #     # TODO port to use the Lexeme class instead of heavy dataframes which we don't need
+    #     raise Exception("This is deprecated.")
+    #     results = execute_sparql_query(f'''
+    #     SELECT DISTINCT
+    #     ?entity_lid ?form ?word (?categoryLabel as ?category) (?grammatical_featureLabel as ?feature) ?sense ?gloss
+    #     WHERE {{
+    #       ?entity_lid a ontolex:LexicalEntry; dct:language wd:{self.language_qid.value}.
+    #       VALUES ?excluded {{
+    #         # exclude affixes and interfix
+    #         wd:Q62155 # affix
+    #         wd:Q134830 # prefix
+    #         wd:Q102047 # suffix
+    #         wd:Q1153504 # interfix
+    #       }}
+    #       MINUS {{?entity_lid wdt:P31 ?excluded.}}
+    #       ?entity_lid wikibase:lexicalCategory ?category.
+    #
+    #       # We want only lexemes with both forms and at least one sense
+    #       ?entity_lid ontolex:lexicalForm ?form.
+    #       ?entity_lid ontolex:sense ?sense.
+    #
+    #       # Exclude lexemes without a linked QID from at least one sense
+    #       ?sense wdt:P5137 [].
+    #       ?sense skos:definition ?gloss.
+    #       # Get only the swedish gloss, exclude otherwise
+    #       FILTER(LANG(?gloss) = "{self.language_code.value}")
+    #
+    #       # This remove all lexemes with at least one example which is not
+    #       # ideal
+    #       MINUS {{?entity_lid wdt:P5831 ?example.}}
+    #       ?form wikibase:grammaticalFeature ?grammatical_feature.
+    #       # We extract the word of the form
+    #       ?form ontolex:representation ?word.
+    #       SERVICE wikibase:label
+    #       {{ bd:serviceParam wikibase:language "{self.language_code.value},en". }}
+    #     }}
+    #     limit {config.sparql_results_size}
+    #     offset {config.sparql_offset}
+    #     ''')
+    #     self.lexemes = []
+    #     for lexeme_json in results:
+    #         logging.debug(f"lexeme_json:{lexeme_json}")
+    #         l = Lexeme.parse_wdqs_json(lexeme_json)
+    #         self.lexemes.append(l)
+    #     logging.info(f"Got {len(self.lexemes)} lexemes from WDQS for language {self.language_code.name}")
+    #
+    # def count_number_of_lexemes(self):
+    #     """Returns an int"""
+    #     logger = logging.getLogger(__name__)
+    #     result = (execute_sparql_query(f'''
+    #     SELECT
+    #     (COUNT(?l) as ?count)
+    #     WHERE {{
+    #       ?l dct:language wd:{self.language_qid.value}.
+    #     }}'''))
+    #     logger.debug(f"result:{result}")
+    #     count: int = wdqs.extract_count(result)
+    #     logging.debug(f"count:{count}")
+    #     return count
+    #
+    # def count_number_of_senses_with_p5137(self):
+    #     """Returns an int"""
+    #     logger = logging.getLogger(__name__)
+    #     result = (execute_sparql_query(f'''
+    #     SELECT
+    #     (COUNT(?sense) as ?count)
+    #     WHERE {{
+    #       ?l dct:language wd:{self.language_qid.value}.
+    #       ?l ontolex:sense ?sense.
+    #       ?sense skos:definition ?gloss.
+    #       # Exclude lexemes without a linked QID from at least one sense
+    #       ?sense wdt:P5137 [].
+    #     }}'''))
+    #     logger.debug(f"result:{result}")
+    #     count: int = wdqs.extract_count(result)
+    #     logging.debug(f"count:{count}")
+    #     return count
+    #
+    # def count_number_of_forms_without_an_example(self):
+    #     """Returns an int"""
+    #     # TODO fix this to count all senses in a given language
+    #     result = (execute_sparql_query(f'''
+    #     SELECT
+    #     (COUNT(?form) as ?count)
+    #     WHERE {{
+    #       ?l dct:language wd:{self.language_qid.value}.
+    #       ?l ontolex:lexicalForm ?form.
+    #       ?l ontolex:sense ?sense.
+    #       # exclude lexemes that already have at least one example
+    #       MINUS {{?l wdt:P5831 ?example.}}
+    #       # Exclude lexemes without a linked QID from at least one sense
+    #       ?sense wdt:P5137 [].
+    #     }}'''))
+    #     count: int = wdqs.extract_count(result)
+    #     logging.debug(f"count:{count}")
+    #     self.forms_without_an_example = count
+    #
+    # def count_number_of_forms_with_examples(self):
+    #     pass
+    #
+    # def count_number_of_forms(self):
+    #     pass
+    #
+    # def calculate_statistics(self):
+    #     self.lexemes_count: int = self.count_number_of_lexemes()
+    #     self.senses_with_P5137: int = self.count_number_of_senses_with_p5137()
+    #     self.calculate_senses_with_p5137_per_lexeme()
+    #
+    # def calculate_senses_with_p5137_per_lexeme(self):
+    #     self.senses_with_P5137_per_lexeme = round(self.senses_with_P5137 / self.lexemes_count, 3)
+    #
+    # def fetch_all_lexemes_without_saob_id(self):
+    #     """download all swedish lexemes via sparql (~23000 as of 2021-04-05)"""
+    #     # dictionary with word as key and list in the value
+    #     # list[0] = lid
+    #     # list[1] = category Qid
+    #     print("Fetching all lexemes")
+    #     lexemes_data = {}
+    #     lexeme_lemma_list = []
+    #     for i in range(0, 30000, 10000):
+    #         print(i)
+    #         results = execute_sparql_query(f"""
+    #                 select ?lexemeId ?lemma ?category
+    #             WHERE {{
+    #               #hint:Query hint:optimizer "None".
+    #               ?lexemeId dct:language wd:Q9027;
+    #                         wikibase:lemma ?lemma;
+    #                         wikibase:lexicalCategory ?category.
+    #               MINUS{{
+    #                 ?lexemeId wdt:P8478 [].
+    #               }}
+    #               MINUS {{
+    #                 # Exclude truthy no value statements
+    #                 ?lexemeId a wdno:P8478.
+    #               }}
+    #             }}
+    #     limit 10000
+    #     offset {i}
+    #         """)
+    #         if len(results) == 0:
+    #             print("No lexeme found")
+    #         else:
+    #             # print("adding lexemes to list")
+    #             # pprint(results.keys())
+    #             # pprint(results["results"].keys())
+    #             # pprint(len(results["results"]["bindings"]))
+    #             for result in results["results"]["bindings"]:
+    #                 # print(result)
+    #                 # *************************
+    #                 # Handle result and upload
+    #                 # *************************
+    #                 lemma = result["lemma"]["value"]
+    #                 lid = result["lexemeId"]["value"].replace(config.wd_prefix, "")
+    #                 lexical_category = result["category"]["value"].replace(config.wd_prefix, "")
+    #                 self.lexemes.append(Lexeme(
+    #                     id=lid,
+    #                     lemma=lemma,
+    #                     lexical_category=lexical_category
+    #                 ))
+    #     print(f"{len(self.lexemes)} fetched")
 
     def fetch_all_lexemes_without_so_id(self):
         """download all swedish lexemes via sparql (~23000 as of 2021-04-05)"""
         # dictionary with word as key and list in the value
         # list[0] = lid
         # list[1] = category Qid
-        print("Fetching all lexemes")
-        lexemes_data = {}
-        lexeme_lemma_list = []
-        for i in range(0, 80000, 40000):
-            print(i)
-            results = execute_sparql_query(f"""
-                    select ?lexemeId ?lemma ?category
-                WHERE {{
-                  #hint:Query hint:optimizer "None".
-                  ?lexemeId dct:language wd:Q9027;
-                            wikibase:lemma ?lemma;
-                            wikibase:lexicalCategory ?category.
-                  MINUS{{
-                    ?lexemeId wdt:P9837 [].
-                  }}
-                  MINUS {{
-                    # Exclude truthy no value statements
-                    ?lexemeId a wdno:P9837.                  
-                  }}
-                }}
-        limit 40000
-        offset {i}
-            """)
-            if len(results) == 0:
-                print("No lexeme found")
-            else:
-                # print("adding lexemes to list")
-                # pprint(results.keys())
-                # pprint(results["results"].keys())
-                # pprint(len(results["results"]["bindings"]))
-                for result in results["results"]["bindings"]:
-                    # print(result)
-                    # *************************
-                    # Handle result and upload
-                    # *************************
-                    lemma = result["lemma"]["value"]
-                    lid = result["lexemeId"]["value"].replace(config.wd_prefix, "")
-                    lexical_category = result["category"]["value"].replace(config.wd_prefix, "")
-                    self.lexemes.append(Lexeme(
-                        id=lid,
-                        lemma=lemma,
-                        lexical_category=lexical_category
-                    ))
+        with console.status("Fetching all lexemes..."):
+            lexemes_data = {}
+            lexeme_lemma_list = []
+            for i in range(0, 80000, 40000):
+                print(i)
+                results = execute_sparql_query(f"""
+                        select ?lexemeId ?lemma ?category
+                    WHERE {{
+                      #hint:Query hint:optimizer "None".
+                      ?lexemeId dct:language wd:Q9027;
+                                wikibase:lemma ?lemma;
+                                wikibase:lexicalCategory ?category.
+                      MINUS{{
+                        ?lexemeId wdt:P9837 [].
+                      }}
+                      MINUS {{
+                        # Exclude truthy no value statements
+                        ?lexemeId a wdno:P9837.                  
+                      }}
+                    }}
+            limit 40000
+            offset {i}
+                """)
+                if len(results) == 0:
+                    print("No lexeme found")
+                else:
+                    # print("adding lexemes to list")
+                    # pprint(results.keys())
+                    # pprint(results["results"].keys())
+                    # pprint(len(results["results"]["bindings"]))
+                    for result in results["results"]["bindings"]:
+                        # print(result)
+                        # *************************
+                        # Handle result and upload
+                        # *************************
+                        lemma = result["lemma"]["value"]
+                        lid = result["lexemeId"]["value"].replace(config.wd_prefix, "")
+                        lexical_category = result["category"]["value"].replace(config.wd_prefix, "")
+                        self.lexemes.append(Lexeme(
+                            id=lid,
+                            lemma=lemma,
+                            lexical_category=lexical_category
+                        ))
         print(f"{len(self.lexemes)} fetched")
 
     def lemma_list(self):

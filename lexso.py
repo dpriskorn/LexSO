@@ -11,6 +11,7 @@ from wikibaseintegrator import wbi_config
 
 import config
 from models import wikidata, so
+from modules.console import console
 
 # Constants
 from models.wikidata import LexemeLanguage, ForeignID
@@ -18,7 +19,7 @@ from models.wikidata import LexemeLanguage, ForeignID
 wd_prefix = "http://www.wikidata.org/entity/"
 count_only = False
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Pseudo code
@@ -31,8 +32,8 @@ logger = logging.getLogger(__name__)
 # add no-value to the lexeme
 
 
-def check_matching_category(lexeme: wikidata.Lexeme = None,
-                            entry: so.SOEntry = None) -> bool:
+def match_lexical_category(lexeme: wikidata.Lexeme = None,
+                           entry: so.SOEntry = None) -> bool:
     logger = logging.getLogger(__name__)
     if lexeme is None or entry is None:
         raise ValueError("Did not get the arguments needed")
@@ -106,45 +107,43 @@ def load_dictionary_into_memory():
     #list[1] = number
     #list[2] = id
     #list[3] = word
-    print("Loading dictionary into memory")
-    dictionary_lemma_list = []
-    dictionary_data = {}
-    # open file in read mode
-    with open('so_2021-09-01.csv', 'r', encoding="UTF-8") as read_obj:
-        # pass the file object to reader() to get the reader object
-        csv_reader = reader(read_obj)
-        count = 0
-        # Iterate over each row in the csv using reader object
-        for row in csv_reader:
-            # row variable is a list that represents a row in csv
-            #row0 is null
-            word = row[1]
-            dictionary_category = row[2]
-            if row[3] == '':
-                dictionary_number = 0
-            else:
-                dictionary_number = int(row[3])
-            url = urlparse(row[4])
-            # print(url.query)
-            dictionary_id = dict(parse_qsl(url.query))["id"]
-            if "_" in dictionary_id:
-                logger.debug(f"Detected underscore id {dictionary_id}")
-                # We hardcode to always return 1 after the underscore
-                dictionary_id = dictionary_id[0:dictionary_id.find("_")] + "_1"
-                logger.debug(f"Hardcoded to {dictionary_id}")
-            # Create object
-            entry = so.SOEntry(
-                id=dictionary_id,
-                lexical_category=dictionary_category,
-                number=dictionary_number,
-                lemma=word
-            )
-            dictionary_data[count] = entry #[dictionary_category, dictionary_number, dictionary_id, word]
-            dictionary_lemma_list.append(word)
-            count += 1
-    print(f"loaded {count} dictionary lines into dictionary with length {len(dictionary_data)}")
-    print(f"loaded {count} dictionary lines into list with length {len(dictionary_lemma_list)}")
-    # exit(0)
+    with console.status("Loading dictionary into memory..."):
+        dictionary_lemma_list = []
+        dictionary_data = {}
+        # open file in read mode
+        with open('so_2021-09-01.csv', 'r', encoding="UTF-8") as read_obj:
+            # pass the file object to reader() to get the reader object
+            csv_reader = reader(read_obj)
+            count = 0
+            # Iterate over each row in the csv using reader object
+            for row in csv_reader:
+                # row variable is a list that represents a row in csv
+                #row0 is null
+                word = row[1]
+                dictionary_category = row[2]
+                if row[3] == '':
+                    dictionary_number = 0
+                else:
+                    dictionary_number = int(row[3])
+                url = urlparse(row[4])
+                # print(url.query)
+                dictionary_id = dict(parse_qsl(url.query))["id"]
+                if "_" in dictionary_id:
+                    logger.debug(f"Detected underscore id {dictionary_id}")
+                    # We hardcode to always return 1 after the underscore
+                    dictionary_id = dictionary_id[0:dictionary_id.find("_")] + "_1"
+                    logger.debug(f"Hardcoded to {dictionary_id}")
+                # Create object
+                entry = so.SOEntry(
+                    id=dictionary_id,
+                    lexical_category=dictionary_category,
+                    number=dictionary_number,
+                    lemma=word
+                )
+                dictionary_data[count] = entry #[dictionary_category, dictionary_number, dictionary_id, word]
+                dictionary_lemma_list.append(word)
+                count += 1
+    print(f"Finished loading {count} dictionary lines")
     return dictionary_lemma_list, dictionary_data
 
 
@@ -178,10 +177,11 @@ def process_lexemes(lexeme_lemma_list: List = None,
         if lexeme.lemma in dictionary_lemma_list:
             for index, dictionary_lemma in enumerate(dictionary_lemma_list):
                 if lexeme.lemma == dictionary_lemma:
+                    # We found a lemma-match!
                     entry = dictionary_data[index]
-                    logger.debug(f"Only 1 matching lemma, see {entry.url()}")
-                    result = check_matching_category(lexeme=lexeme,
-                                                     entry=entry)
+                    # Check if the lexical categories match also
+                    result = match_lexical_category(lexeme=lexeme,
+                                                    entry=entry)
                     if result:
                         match_count += 1
                         if not count_only:
@@ -194,7 +194,8 @@ def process_lexemes(lexeme_lemma_list: List = None,
                         break
         else:
             if not count_only:
-                logging.debug(f"{lexeme.lemma} not found in dictionary wordlist, see https://svenska.se/so/?sok={lexeme.lemma}")
+                logging.warning(f"{lexeme.lemma} not found in dictionary wordlist, "
+                                f"see https://svenska.se/so/?sok={lexeme.lemma}")
                 sleep(3)
                 if config.add_no_value:
                     # Add dictionary=no_value to lexeme
@@ -214,12 +215,12 @@ def process_lexemes(lexeme_lemma_list: List = None,
 
 def main():
     if not count_only:
-        print("Logging in with Wikibase Integrator")
-        config.login_instance = wbi_login.Login(
-            user=config.username, pwd=config.password
-        )
-        # Set User-Agent
-        wbi_config.config["USER_AGENT_DEFAULT"] = config.user_agent
+        with console.status("Logging in with WikibaseIntegrator..."):
+            config.login_instance = wbi_login.Login(
+                user=config.username, pwd=config.password
+            )
+            # Set User-Agent
+            wbi_config.config["USER_AGENT_DEFAULT"] = config.user_agent
     language = LexemeLanguage("sv")
     language.fetch_all_lexemes_without_so_id()
     lexemes_list = language.lemma_list()
