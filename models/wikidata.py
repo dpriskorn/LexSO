@@ -158,8 +158,11 @@ class Lexeme:
                 if_exits="APPEND"
             )
             item = wbi_core.ItemEngine(
-                data=[statement,
-                      described_by_source],
+                # data=[statement,
+                #       described_by_source],
+                # Turn off described_by_source until
+                # https://github.com/LeMyst/WikibaseIntegrator/issues/208 is fixed
+                data=[statement],
                 item_id=self.id
             )
             # debug WBI error
