@@ -1,5 +1,5 @@
 # LexSO
-**Note: please don't run until https://github.com/LeMyst/WikibaseIntegrator/issues/208 has been resolved**
+**Note: [a bot request has been filed](https://www.wikidata.org/wiki/Wikidata:Requests_for_permissions/Bot#So9qBot_6)**
 
 Add SO identifier to Wikidata Lexemes [Wikidata Property:P9837](https://www.wikidata.org/wiki/Property:P9837). 
 
