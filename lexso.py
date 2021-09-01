@@ -2,6 +2,7 @@
 # Licensed under GPLv3+ i.e. GPL version 3 or later.
 import logging
 from csv import reader
+from time import sleep
 from typing import List, Dict
 from urllib.parse import urlparse, parse_qsl
 
@@ -109,7 +110,7 @@ def load_dictionary_into_memory():
     dictionary_lemma_list = []
     dictionary_data = {}
     # open file in read mode
-    with open('so_2021-09-01.csv', 'r') as read_obj:
+    with open('so_2021-09-01.csv', 'r', encoding="UTF-8") as read_obj:
         # pass the file object to reader() to get the reader object
         csv_reader = reader(read_obj)
         count = 0
@@ -193,7 +194,8 @@ def process_lexemes(lexeme_lemma_list: List = None,
                         break
         else:
             if not count_only:
-                logging.debug(f"{lexeme.lemma} not found in dictionary wordlist")
+                logging.debug(f"{lexeme.lemma} not found in dictionary wordlist, see https://svenska.se/so/?sok={lexeme.lemma}")
+                sleep(3)
                 if config.add_no_value:
                     # Add dictionary=no_value to lexeme
                     lexeme.upload_foreign_id_to_wikidata(foreign_id=ForeignID(
