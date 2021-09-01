@@ -7,11 +7,11 @@ password = ""
 
 # Global variables
 count_only = False
-add_no_value = True
-match_subentry = False
-login_instance = None
-loglevel = None
-tool_url = "Wikidata:Tools/LexSAOB"
+add_no_value = False
+tool_url = "Wikidata:Tools/LexSO"
+user_agent = f"LexSO (WikidataIntegrator/0.11.0) User:So9q " + tool_url
 wd_prefix = "http://www.wikidata.org/entity/"
 foreign_id_property = "P9837"
 source_item_id = "Q108312794"
+
+login_instance = None
