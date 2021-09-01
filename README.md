@@ -1,4 +1,6 @@
 # LexSO
+**Note: please don't run until https://github.com/LeMyst/WikibaseIntegrator/issues/208 has been resolved**
+
 Add SO identifier to Wikidata Lexemes [Wikidata Property:P9837](https://www.wikidata.org/wiki/Property:P9837). 
 
 This script is maybe not that useful to run for anyone else besides the author in its current form. It is shared here to help others get started writing scripts to improve Wikidata.
@@ -29,4 +31,4 @@ username = "username"
 password= "password"
 
 # License
-GPLv3+
+All code except get_so_list.py is GPLv3+
