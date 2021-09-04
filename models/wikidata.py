@@ -148,14 +148,14 @@ class Lexeme:
                 described_by_source = wbi_datatype.ItemID(
                     prop_nr="P1343",  # stated in
                     value=foreign_id.source_item_id,
-                    if_exits="APPEND"
+                    if_exists="APPEND"
                 )
                 item = wbi_core.ItemEngine(
                     # data=[statement,
                     #       described_by_source],
                     # Turn off described_by_source until
                     # https://github.com/LeMyst/WikibaseIntegrator/issues/208 is fixed
-                    data=[statement],
+                    data=[statement, described_by_source],
                     item_id=self.id
                 )
                 # debug WBI error
