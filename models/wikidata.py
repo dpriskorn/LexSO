@@ -61,7 +61,7 @@ class WikidataTimeFormat:
             self.datetime = datetime
 
     def day(self):
-        return datetime.strftime(self.datetime, "+%Y-%m-%dT00:00:00Z/11")
+        return datetime.strftime(self.datetime, "+%Y-%m-%dT00:00:00Z")
 
 
 class EntityID:
@@ -136,15 +136,16 @@ class Lexeme:
             else:
                 with console.status(f"Uploading no_value statement to {self.id}: {self.lemma}..."):
                     time_object = WikidataTimeFormat(datetime.today())
+                    # console.print(time_object.day())
                     date_qualifier = wbi_datatype.Time(
+                        time_object.day(),
                         prop_nr="P585",
-                        value=time_object.day()
                     )
                     statement = wbi_datatype.ExternalID(
                         prop_nr=foreign_id.property,
                         value=None,
                         snak_type="novalue",
-                        qualifiers=date_qualifier
+                        qualifiers=[date_qualifier]
                     )
                     item = wbi_core.ItemEngine(
                         data=[statement],
@@ -157,7 +158,7 @@ class Lexeme:
                         edit_summary=f"Added foreign identifier with [[{config.tool_url}]]"
                     )
                     logger.debug(f"result from WBI:{result}")
-                    print(self.url())
+                    console.print(f"{self.url()} (novalue)")
                     #exit(0)
         else:
             # We found the lemma
@@ -186,7 +187,7 @@ class Lexeme:
                     edit_summary=f"Added foreign identifier with [[{config.tool_url}]]"
                 )
                 logger.debug(f"result from WBI:{result}")
-                print(self.url())
+                console.print(f"{self.url()} ({foreign_id.id})")
                 # exit(0)
 
 
@@ -413,7 +414,8 @@ class LexemeLanguage:
         # dictionary with word as key and list in the value
         # list[0] = lid
         # list[1] = category Qid
-        with console.status("Fetching all Swedish lexemes via WDQS SPARQL query..."):
+        with console.status("Fetching all Swedish lexemes without "
+                            "Svenska Ord ID via a WDQS SPARQL query..."):
             lexemes_data = {}
             lexeme_lemma_list = []
             for i in range(0, 80000, 40000):

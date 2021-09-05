@@ -4,7 +4,7 @@ import logging
 from csv import reader
 from time import sleep
 from typing import List, Dict
-from urllib.parse import urlparse, parse_qsl, unquote
+from urllib.parse import urlparse, parse_qsl, quote
 
 from wikibaseintegrator import wbi_config
 from wikibaseintegrator import wbi_login
@@ -149,7 +149,7 @@ def load_dictionary_into_memory():
                 dictionary_data[count] = entry #[dictionary_category, dictionary_number, dictionary_id, word]
                 dictionary_lemma_list.append(word)
                 count += 1
-    print(f"Finished loading {count} dictionary lines")
+    console.print(f"[green]Finished loading {count} dictionary lines")
     return dictionary_lemma_list, dictionary_data
 
 
@@ -196,12 +196,14 @@ def process_lexemes(lexeme_lemma_list: List = None,
                                 property=config.foreign_id_property,
                                 source_item_id=config.source_item_id
                             ))
+                        # debug
+                        # raise Exception("debug exit")
                         # Pick only the first search result in the dictionary wordlist
                         break
         else:
             if not count_only:
                 console.print(f"[red]{lexeme.lemma} not found in dictionary wordlist, "
-                                f"see https://svenska.se/so/?sok={unquote(lexeme.lemma)}")
+                                f"see https://svenska.se/so/?sok={quote(lexeme.lemma)}")
                 if config.add_no_value:
                     # Add dictionary=no_value to lexeme
                     lexeme.upload_foreign_id_to_wikidata(foreign_id=ForeignID(
