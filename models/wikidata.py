@@ -126,40 +126,32 @@ class Lexeme:
         if foreign_id is None:
             raise Exception("Foreign id was None")
         elif foreign_id.no_value:
-            # We did not find the lemma in SAOB
-            # See https://www.saob.se/artikel/?pz=1&seek=%C3%A4rva
-            # Skip unsupported lemmas
-            supported_by_saob = "abcdefghijklmnopqrstu"
-            if self.lemma[:1] not in supported_by_saob:
-                logger.debug("Skip adding no-value to this lemma because "
-                             "SAOB only published lemma from a-u.")
-            else:
-                with console.status(f"Uploading no_value statement to {self.id}: {self.lemma}..."):
-                    time_object = WikidataTimeFormat(datetime.today())
-                    # console.print(time_object.day())
-                    date_qualifier = wbi_datatype.Time(
-                        time_object.day(),
-                        prop_nr="P585",
-                    )
-                    statement = wbi_datatype.ExternalID(
-                        prop_nr=foreign_id.property,
-                        value=None,
-                        snak_type="novalue",
-                        qualifiers=[date_qualifier]
-                    )
-                    item = wbi_core.ItemEngine(
-                        data=[statement],
-                        item_id=self.id
-                    )
-                    # debug WBI error
-                    # print(item.get_json_representation())
-                    result = item.write(
-                        config.login_instance,
-                        edit_summary=f"Added foreign identifier with [[{config.tool_url}]]"
-                    )
-                    logger.debug(f"result from WBI:{result}")
-                    console.print(f"{self.url()} (novalue)")
-                    #exit(0)
+            with console.status(f"Uploading no_value statement to {self.id}: {self.lemma}..."):
+                time_object = WikidataTimeFormat(datetime.today())
+                # console.print(time_object.day())
+                date_qualifier = wbi_datatype.Time(
+                    time_object.day(),
+                    prop_nr="P585",
+                )
+                statement = wbi_datatype.ExternalID(
+                    prop_nr=foreign_id.property,
+                    value=None,
+                    snak_type="novalue",
+                    qualifiers=[date_qualifier]
+                )
+                item = wbi_core.ItemEngine(
+                    data=[statement],
+                    item_id=self.id
+                )
+                # debug WBI error
+                # print(item.get_json_representation())
+                result = item.write(
+                    config.login_instance,
+                    edit_summary=f"Added foreign identifier with [[{config.tool_url}]]"
+                )
+                logger.debug(f"result from WBI:{result}")
+                console.print(f"{self.url()} (novalue)")
+                #exit(0)
         else:
             # We found the lemma
             with console.status(f"Uploading {foreign_id.id} to {self.id}: {self.lemma}"):
