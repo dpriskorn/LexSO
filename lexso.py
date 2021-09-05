@@ -44,7 +44,7 @@ def match_lexical_category(lexeme: wikidata.Lexeme = None,
     category = None
     if entry.lexical_category == "" or entry.lexical_category is None:
         if not count_only:
-            logging.info("No category found")
+            raise ValueError("No category found")
     elif "verb" in entry.lexical_category:
         category = "Q24905"
     elif "subst" in entry.lexical_category:
@@ -76,7 +76,8 @@ def match_lexical_category(lexeme: wikidata.Lexeme = None,
     elif (
             entry.lexical_category == "prefix" or
             entry.lexical_category == "suffix" or
-            entry.lexical_category == "affix"
+            entry.lexical_category == "affix" or
+            "förled" in entry.lexical_category  # e.g. https://svenska.se/so/?id=157051
     ):
         category = "Q62155"
     elif (
