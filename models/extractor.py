@@ -1,4 +1,5 @@
 import uuid
+from pprint import pprint
 from typing import List
 from bs4 import BeautifulSoup
 from pydantic import BaseModel
@@ -42,11 +43,27 @@ class Lemvar(DictionaryElement):
         return cls(id_=id_, value=value, inflections=inflections)
 
 
+class Pronounciation(BaseModel):
+    id_: str
+    url: str
+
+    @staticmethod
+    def mp3_url(id_: str) -> str:
+        """
+        Generates the URL for the MP3 file for this identifier.
+
+        :return: URL string for the MP3 file
+        """
+        base_url = 'https://isolve-so-service.appspot.com/pronounce?id='
+        return f"{base_url}{id_}.mp3"
+
+
 class Superlemma(DictionaryElement):
     prefix: str = "snr"
     lemvar: Lemvar
     hyphenation: str  # called 'avstav' # P5279
     lexical_category: str  # called 'ordklass'
+    pronunciation: Pronounciation | None = None
 
     @classmethod
     def from_soup(cls, soup):
@@ -62,11 +79,25 @@ class Superlemma(DictionaryElement):
         if lemvar is None:
             raise ValueError("Lemvar cannot be None")
         hyphenation = soup.find("span", class_="avstav").text.strip() if soup.find("span", class_="avstav") else ""
-        lexical_category = soup.find("div", class_="ordklass").text.strip() if soup.find("div", class_="ordklass") else ""
-        return cls(id_=id_, value=lemvar.value if lemvar else "", lemvar=lemvar, hyphenation=hyphenation, lexical_category=lexical_category)
+        lexical_category = soup.find("div", class_="ordklass").text.strip() if soup.find("div",
+                                                                                         class_="ordklass") else ""
+
+        # Extract pronunciation if available
+        pronunciation_tag = soup.find("a", class_="ljudfil")
+        pronunciation = pronunciation_tag.get('onclick').split('\'')[1] if pronunciation_tag else None
+
+        # Generate pronunciation URL using mp3_url property
+        pronunciation_url = Pronounciation.mp3_url(pronunciation)
+
+        # Create Pronounciation instance
+        pronunciation_instance = Pronounciation(id_=pronunciation, url=pronunciation_url)
+
+        return cls(id_=id_, value=lemvar.value if lemvar else "", lemvar=lemvar, hyphenation=hyphenation,
+                   lexical_category=lexical_category, pronunciation=pronunciation_instance)
 
 
-class Artikel(BaseModel):
+
+class Article(BaseModel):
     """Entry with year of publication and list of lemmas"""
     year_of_publication: str  # called 'tryck'
     lemmalist: List[Superlemma]  # lemmalista
@@ -161,9 +192,7 @@ class Sentence(DictionaryElement):
 
 class Extractor(BaseModel):
     html_content: str
-    idioms: List[Idiom] = []
-    sentences: List[Sentence] = []
-    articles: List[Artikel] = []
+    articles: List[Article] = []
 
     def extract_articles(self):
         # Parse the HTML content
@@ -174,7 +203,7 @@ class Extractor(BaseModel):
 
         for article_div in article_divs:
             # Extract the article
-            article = Artikel.from_soup(article_div)
+            article = Article.from_soup(article_div)
             if article:
                 self.articles.append(article)
 
@@ -261,12 +290,14 @@ extractor = Extractor(html_content=html_content)
 extractor.extract_articles()
 
 for article in extractor.articles:
+    pprint(article.model_dump())
     print("Year of Publication:", article.year_of_publication)
     for superlemma in article.lemmalist:
         print("Superlemma ID:", superlemma.id_)
         print("Superlemma Value:", superlemma.value)
         print("Hyphenation:", superlemma.hyphenation)
         print("Lexical Category:", superlemma.lexical_category)
+        print("Pronounciation url:", superlemma.pronunciation.url)
         for inflection in superlemma.lemvar.inflections:
             print("Inflection ID:", inflection.id_)
             print("Inflection Value:", inflection.value)
