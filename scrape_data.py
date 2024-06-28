@@ -1,22 +1,16 @@
-from bs4 import SoupStrainer, BeautifulSoup
-from httpx import Limits
-from pydantic import BaseModel, Field, ValidationError
-from typing import List, Tuple
-import pandas as pd
-import httpx
 import asyncio
-import os
 import gzip
+import os
+from typing import List
 
+import httpx
+import pandas as pd
+from bs4 import SoupStrainer, BeautifulSoup
+from httpx import Limits, ConnectTimeout, ReadTimeout
+from pydantic import BaseModel, Field, ValidationError
 from tqdm.asyncio import tqdm
 
-from pydantic import BaseModel, Field, ValidationError
-from typing import List
-import pandas as pd
-import httpx
-import asyncio
-import os
-import gzip
+from config import max_ids_to_scrape
 
 
 class Identifier(BaseModel):
@@ -31,15 +25,15 @@ class Identifier(BaseModel):
     def __hash__(self):
         return hash(self.id_)
 
-    @property
-    def mp3_url(self) -> str:
-        """
-        Generates the URL for the MP3 file for this identifier.
-
-        :return: URL string for the MP3 file
-        """
-        base_url = 'https://isolve-so-service.appspot.com/pronounce?id='
-        return f"{base_url}{self.id_}.mp3"
+    # @property
+    # def mp3_url(self) -> str:
+    #     """
+    #     Generates the URL for the MP3 file for this identifier.
+    #
+    #     :return: URL string for the MP3 file
+    #     """
+    #     base_url = 'https://isolve-so-service.appspot.com/pronounce?id='
+    #     return f"{base_url}{self.id_}.mp3"
 
     @property
     def url(self):
@@ -47,6 +41,7 @@ class Identifier(BaseModel):
 
 
 class IdentifierModel(BaseModel):
+    fetched: int = 0
     identifiers: List[Identifier] = Field(..., description="List of Identifier objects")
 
     @classmethod
@@ -88,29 +83,33 @@ class IdentifierModel(BaseModel):
         file_path = os.path.join(output_dir, f"{identifier.id_}.html.gz")
 
         if not os.path.exists(file_path):
-            async with httpx.AsyncClient(limits=Limits(max_connections=50, max_keepalive_connections=20)) as client:
-                response = await client.get(identifier.url)
-                response.raise_for_status()
+            async with httpx.AsyncClient(limits=Limits(max_connections=20, max_keepalive_connections=10)) as client:
+                try:
+                    response = await client.get(identifier.url)
+                    response.raise_for_status()
 
-                # HTML content as string
-                html_content = response.text
-                # Define the tag and attributes you want to extract
-                strainer = SoupStrainer(attrs={"itemprop": "articleBody"})
+                    # HTML content as string
+                    html_content = response.text
+                    # Define the tag and attributes you want to extract
+                    strainer = SoupStrainer(attrs={"itemprop": "articleBody"})
 
-                # Parse the HTML content with BeautifulSoup
-                soup = BeautifulSoup(html_content, 'lxml', parse_only=strainer)
-                html = str(soup)
-                # Write the HTML content gzipped to the file
-                with gzip.open(file_path, 'wt', encoding='utf-8') as f:
-                    f.write(html)
-
-                return file_path
+                    # Parse the HTML content with BeautifulSoup
+                    soup = BeautifulSoup(html_content, 'lxml', parse_only=strainer)
+                    html = str(soup)
+                    # Write the HTML content gzipped to the file
+                    with gzip.open(file_path, 'wt', encoding='utf-8') as f:
+                        f.write(html)
+                    self.fetched += 1
+                    return file_path
+                except (ConnectTimeout, ReadTimeout):
+                    print("got timeout")
+                    #exit()
 
     async def fetch_all_html(self):
         """
         Fetch and save HTML for all identifiers.
         """
-        ids = self.identifiers[:5]
+        ids = self.identifiers[:max_ids_to_scrape]
         tasks = [self.fetch_url(id_) for id_ in ids]
         return await tqdm.gather(*tasks)
 
@@ -129,6 +128,7 @@ try:
         if html_file is None:
             html_file = "Already fetched"
         print(f"Identifier: {identifier.id_}, Saved HTML file: {html_file}")
+    print(f"Fetched {identifier_model.fetched} pages")
 
 except ValidationError as e:
     print("Validation error:", e)
