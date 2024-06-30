@@ -6,8 +6,8 @@ def main():
     extractor = Extractor()
 
     # Call the extract_from_gzip_files method
-    extractor.extract_from_gzip_files()
-    extractor.dump_articles_to_jsonl()
+    extractor.process_and_dump_individual_files()
+    # extractor.dump_articles_to_jsonl()
 
     # Print the extracted articles
     # for article in extractor.articles:

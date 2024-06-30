@@ -1,15 +1,17 @@
 import asyncio
 import gzip
 import os
+import time
 from typing import List
 
 import httpx
 import pandas as pd
 from bs4 import SoupStrainer, BeautifulSoup
-from httpx import Limits, ConnectTimeout, ReadTimeout
+from httpx import Limits, ConnectTimeout, ReadTimeout, ConnectError, HTTPStatusError
 from pydantic import BaseModel, Field, ValidationError
 from tqdm.asyncio import tqdm
 
+import config
 from config import max_ids_to_scrape
 
 
@@ -42,6 +44,7 @@ class Identifier(BaseModel):
 
 class IdentifierModel(BaseModel):
     fetched: int = 0
+    timeout: int = 0
     identifiers: List[Identifier] = Field(..., description="List of Identifier objects")
 
     @classmethod
@@ -83,7 +86,14 @@ class IdentifierModel(BaseModel):
         file_path = os.path.join(output_dir, f"{identifier.id_}.html.gz")
 
         if not os.path.exists(file_path):
-            async with httpx.AsyncClient(limits=Limits(max_connections=20, max_keepalive_connections=10)) as client:
+            """They seem to have some kind of blocking against scraping. 
+            When I ask for 1000 pages I get ~900 timeouts the first try
+            Then if I ask immediately again I get 100% timeouts.
+            Then I wait 20 seconds and ask again and then I get 100 pages and the rest is blocked
+            
+            So the best cause of action is to fetch 100, wait 15-20 seconds then fetch the next 100 and so forth"""
+            async with httpx.AsyncClient(limits=Limits(max_connections=5, #max_keepalive_connections=2
+                                                       )) as client:
                 try:
                     response = await client.get(identifier.url)
                     response.raise_for_status()
@@ -101,15 +111,17 @@ class IdentifierModel(BaseModel):
                         f.write(html)
                     self.fetched += 1
                     return file_path
-                except (ConnectTimeout, ReadTimeout):
-                    print("got timeout")
-                    #exit()
+                except (ConnectTimeout, ReadTimeout,
+                        HTTPStatusError
+                        ):
+                    # print("got timeout")
+                    self.timeout += 1
 
-    async def fetch_all_html(self):
+    async def fetch_all_html(self, start, stop):
         """
         Fetch and save HTML for all identifiers.
         """
-        ids = self.identifiers[:max_ids_to_scrape]
+        ids = self.identifiers[start:stop]
         tasks = [self.fetch_url(id_) for id_ in ids]
         return await tqdm.gather(*tasks)
 
@@ -121,14 +133,27 @@ try:
     identifier_model = IdentifierModel.from_csv('data/P9837.csv')
     print(f"Starting fetch of html for all {len(identifier_model.identifiers)} identifiers")
     # Fetch and save all HTML pages asynchronously
-    html_files = asyncio.run(identifier_model.fetch_all_html())
-
-    # Print the paths to the saved HTML files
-    for identifier, html_file in zip(identifier_model.identifiers, html_files):
-        if html_file is None:
-            html_file = "Already fetched"
-        print(f"Identifier: {identifier.id_}, Saved HTML file: {html_file}")
-    print(f"Fetched {identifier_model.fetched} pages")
+    run = True
+    start = 100
+    stop = 200
+    fetched = 0
+    timeout = 0
+    while run:
+        print(f"Start = {start}, stop = {stop}")
+        asyncio.run(identifier_model.fetch_all_html(start=start, stop=stop))
+        new_fetched = identifier_model.fetched
+        new_timeout =  identifier_model.timeout
+        print(f"Fetched {new_fetched - fetched} pages and got {new_timeout - timeout} timouts")
+        if new_fetched > fetched:
+            print("Sleeping 15 sec to avoid timeouts")
+            time.sleep(15)
+        start += 100
+        stop = start + 100
+        fetched = new_fetched
+        timeout = new_timeout
+        if start >= config.max_ids_to_scrape:
+            run = False
+            print(f"Stopped at {config.max_ids_to_scrape}")
 
 except ValidationError as e:
     print("Validation error:", e)
